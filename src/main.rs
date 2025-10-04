@@ -103,6 +103,7 @@ fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
     let mut last_error = None;
 
     for config_path in config_paths {
+        tracing::info!("Trying config path: {}", config_path.display());
         if config_path.exists() {
             match fs::read_to_string(&config_path) {
                 Ok(config_str) => {
