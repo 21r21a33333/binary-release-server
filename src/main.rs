@@ -67,44 +67,31 @@ async fn home_handler(
 async fn health_handler() -> impl IntoResponse {
     (StatusCode::OK, "OK")
 }
-
 fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
-    use std::env;
-    use std::path::PathBuf;
+    // Get the executable's directory
+    let exe_path = std::env::current_exe()?;
+    let exe_dir = exe_path
+        .parent()
+        .ok_or("Could not determine executable directory")?;
 
-    // Compute possible config paths based on the running binary and current directory
-    let mut config_paths = Vec::new();
-
-    // 1. Try config/config.json relative to the executable
-    if let Ok(exe_path) = env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            config_paths.push(exe_dir.join("config/config.json"));
-            config_paths.push(exe_dir.join("../config/config.json"));
-        }
-    }
-
-    // 2. Try config/config.json relative to the current working directory
-    if let Ok(cwd) = env::current_dir() {
-        config_paths.push(cwd.join("config/config.json"));
-        config_paths.push(cwd.join("../config/config.json"));
-        config_paths.push(cwd.join("config.json"));
-    }
-
-    // 3. Try config.json in the same directory as the executable
-    if let Ok(exe_path) = env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            config_paths.push(exe_dir.join("config.json"));
-        }
-    }
-
-    // 4. Fallback: just "config.json" in the current directory
-    config_paths.push(PathBuf::from("config.json"));
+    // Try multiple config paths in order of preference
+    let config_paths = vec![
+        // Relative to binary location (for symlinked or direct execution)
+        Some(exe_dir.join("../config/config.json")),
+        exe_dir
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.join("config/config.json")),
+        // Current working directory
+        Some(std::path::PathBuf::from("config/config.json")),
+        Some(std::path::PathBuf::from("../config/config.json")),
+        Some(std::path::PathBuf::from("config.json")),
+    ];
 
     let mut last_error = None;
 
-    for config_path in config_paths {
-        tracing::info!("Trying config path: {}", config_path.display());
-        if config_path.exists() {
+    for config_path_opt in config_paths {
+        if let Some(config_path) = config_path_opt {
             match fs::read_to_string(&config_path) {
                 Ok(config_str) => {
                     let config: Config = serde_json::from_str(&config_str)
@@ -117,8 +104,6 @@ fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
                     continue;
                 }
             }
-        } else {
-            last_error = Some(format!("{}: not found", config_path.display()));
         }
     }
 
