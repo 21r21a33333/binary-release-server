@@ -69,27 +69,55 @@ async fn health_handler() -> impl IntoResponse {
 }
 
 fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
-    // Try multiple config paths in order of preference
-    let config_paths = vec![
-        "config/config.json",    // Production path (relative to installation)
-        "../config/config.json", // When running from bin/ directory
-        "config.json",           // Development/fallback
-    ];
+    use std::env;
+    use std::path::PathBuf;
+
+    // Compute possible config paths based on the running binary and current directory
+    let mut config_paths = Vec::new();
+
+    // 1. Try config/config.json relative to the executable
+    if let Ok(exe_path) = env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            config_paths.push(exe_dir.join("config/config.json"));
+            config_paths.push(exe_dir.join("../config/config.json"));
+        }
+    }
+
+    // 2. Try config/config.json relative to the current working directory
+    if let Ok(cwd) = env::current_dir() {
+        config_paths.push(cwd.join("config/config.json"));
+        config_paths.push(cwd.join("../config/config.json"));
+        config_paths.push(cwd.join("config.json"));
+    }
+
+    // 3. Try config.json in the same directory as the executable
+    if let Ok(exe_path) = env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            config_paths.push(exe_dir.join("config.json"));
+        }
+    }
+
+    // 4. Fallback: just "config.json" in the current directory
+    config_paths.push(PathBuf::from("config.json"));
 
     let mut last_error = None;
 
     for config_path in config_paths {
-        match fs::read_to_string(config_path) {
-            Ok(config_str) => {
-                let config: Config = serde_json::from_str(&config_str)
-                    .map_err(|e| format!("Failed to parse {}: {}", config_path, e))?;
-                tracing::info!("Loaded config from: {}", config_path);
-                return Ok(config);
+        if config_path.exists() {
+            match fs::read_to_string(&config_path) {
+                Ok(config_str) => {
+                    let config: Config = serde_json::from_str(&config_str)
+                        .map_err(|e| format!("Failed to parse {}: {}", config_path.display(), e))?;
+                    tracing::info!("Loaded config from: {}", config_path.display());
+                    return Ok(config);
+                }
+                Err(e) => {
+                    last_error = Some(format!("{}: {}", config_path.display(), e));
+                    continue;
+                }
             }
-            Err(e) => {
-                last_error = Some(format!("{}: {}", config_path, e));
-                continue;
-            }
+        } else {
+            last_error = Some(format!("{}: not found", config_path.display()));
         }
     }
 
