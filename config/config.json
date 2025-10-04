@@ -1,0 +1,4 @@
+{
+    "message": "Hello from config-server!",
+    "port": 3000
+}
