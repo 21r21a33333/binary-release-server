@@ -82,7 +82,7 @@ jobs:
           TARGET="${{ matrix.target }}"
           ARCHIVE_SUFFIX="${{ matrix.archive_suffix }}"
           # Use the git repository name as the binary name
-          BINARY_NAME="$(basename -s .git $(git config --get remote.origin.url) 2>/dev/null || echo config-server)"
+          BINARY_NAME="$(basename -s .git $(git config --get remote.origin.url) 2>/dev/null || echo binary-release-server)"
 
           # Extract architecture from target
           ARCH=$(echo $TARGET | cut -d'-' -f1)
@@ -95,8 +95,8 @@ jobs:
           # Copy binary
           cp "target/${TARGET}/release/${BINARY_NAME}" "${RELEASE_DIR}/bin/"
 
-          # Copy config file
-          cp config.json "${RELEASE_DIR}/config/"
+          # Copy config file (it's in config/ directory in your repo)
+          cp config/config.json "${RELEASE_DIR}/config/"
 
           # Copy additional files
           [ -f README.md ] && cp README.md "${RELEASE_DIR}/"
@@ -104,7 +104,7 @@ jobs:
 
           # Create COPYRIGHT file
           cat > "${RELEASE_DIR}/COPYRIGHT" << 'EOF'
-          Copyright (c) 2025 Config Server Authors
+          Copyright (c) 2025 Binary Release Server Authors
 
           Permission is hereby granted, free of charge, to any person obtaining a copy
           of this software and associated documentation files (the "Software"), to deal
@@ -157,6 +157,9 @@ jobs:
     needs: build-and-release
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Extract version
         id: get_version
         run: |
@@ -166,14 +169,14 @@ jobs:
       - name: Set binary name
         run: |
           # Use the git repository name as the binary name
-          BINARY_NAME="$(basename -s .git $(git config --get remote.origin.url) 2>/dev/null || echo config-server)"
+          BINARY_NAME="$(basename -s .git $(git config --get remote.origin.url) 2>/dev/null || echo binary-release-server)"
           echo "BINARY_NAME=$BINARY_NAME" >> $GITHUB_ENV
 
       - name: Create Release Notes
         uses: softprops/action-gh-release@v1
         with:
           body: |
-            ## Config Server v${{ steps.get_version.outputs.VERSION }}
+            ## Binary Release Server v${{ steps.get_version.outputs.VERSION }}
 
             ### Installation
 
@@ -181,9 +184,9 @@ jobs:
 
             #### Quick Install (Linux/macOS):
             ```bash
-            # Replace {OS} and {ARCH} with your system
-            curl -sL https://github.com/${{ github.repository }}/releases/download/v${{ steps.get_version.outputs.VERSION }}/${{ env.BINARY_NAME }}-${{ steps.get_version.outputs.VERSION }}-{OS}-{ARCH}.tar.gz | tar xz
-            cd ${{ env.BINARY_NAME }}-${{ steps.get_version.outputs.VERSION }}-{OS}-{ARCH}
+            # Replace {OS} with your system (darwin, unknown-linux-gnu, unknown-linux-musl)
+            curl -sL https://github.com/${{ github.repository }}/releases/download/v${{ steps.get_version.outputs.VERSION }}/${{ env.BINARY_NAME }}-${{ steps.get_version.outputs.VERSION }}-{OS}.tar.gz | tar xz
+            cd ${{ env.BINARY_NAME }}-${{ steps.get_version.outputs.VERSION }}-{OS}
             ./bin/${{ env.BINARY_NAME }}
             ```
 
@@ -206,7 +209,17 @@ jobs:
 
             Each binary includes a `.sha256` file for verification:
             ```bash
-            sha256sum -c ${{ env.BINARY_NAME }}-${{ steps.get_version.outputs.VERSION }}-{OS}-{ARCH}.tar.gz.sha256
+            sha256sum -c ${{ env.BINARY_NAME }}-${{ steps.get_version.outputs.VERSION }}-{OS}.tar.gz.sha256
+            ```
+
+            ### Configuration
+
+            Edit `config/config.json` to customize the server:
+            ```json
+            {
+              "message": "Your custom message",
+              "port": 3000
+            }
             ```
 
             ### What's Changed
